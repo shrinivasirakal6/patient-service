@@ -1,0 +1,54 @@
+---
+- name: First Play - Docker Image Build
+  hosts: docker_host
+  vars:
+    dockerhub_user: "shrinivas333"
+    image_name: "patient-service"
+    tag: "latest"
+
+  tasks:
+    - name: Copy Dockerfile
+      copy:
+        src: /home/ansible/workspace/patient-service/Dockerfile
+        dest: /home/ansible/
+
+    - name: Copy Artifact
+      copy:
+        src: /home/ansible/workspace/patient-service/target/
+        dest: /home/ansible/target/
+
+    - name: Build image
+      # Building with the Docker Hub tag directly
+      command: "docker build -t {{ dockerhub_user }}/{{ image_name }}:{{ tag }} ."
+      args:
+        chdir: /home/ansible/
+
+    - name: Push image to Docker Hub
+      # Since you are already logged in on the host, this will work
+      command: "docker push {{ dockerhub_user }}/{{ image_name }}:{{ tag }}"
+
+# Second Play - Deploy to EKS Host
+- name: Second Play - Deploy to Kubernetes
+  hosts: eks_host
+  vars:
+    dockerhub_user: "shrinivas333"
+    image_name: "patient-service"
+    tag: "latest"
+
+  tasks:
+    - name: Copy K8s Manifest
+      copy:
+        src: /home/ansible/workspace/patient-service/deployment.yaml
+        dest: /home/ansible/
+
+    - name: Update manifest with Docker Hub image
+      # This ensures the manifest uses the remote image instead of the local one
+      replace:
+        path: /home/ansible/deployment.yaml
+        regexp: 'image: .*'
+        replace: "image: {{ dockerhub_user }}/{{ image_name }}:{{ tag }}"
+
+    - name: Deploy to K8s Cluster
+      command: kubectl apply -f deployment.yaml
+      args:
+        chdir: /home/ansible/
